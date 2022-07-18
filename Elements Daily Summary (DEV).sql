@@ -281,7 +281,7 @@ Current_year_Sessions as (
     where 1=1
 	and a.date_aest::date>=dateadd('year', -2, date_trunc('year',getdate_aest()))::date
     and a.date<to_char(getdate_aest(),'YYYYMMDD')::INT
-    group by 2,3,4,5,6),
+    group by 1,2,3,4,5,6),
 
     Last_Year_Sessions as (
 
@@ -432,61 +432,121 @@ Current_year_signups as (
 
 Current_Year_Terminations as
 
-      (  SELECT
-        'C' as Period,
-        termination_date as calendar_date,
-        c.channel,
-        c.sub_channel,
-        c.channel_detail,
-        geonetwork_country,
-        initial_plan,
-        coupon_type_first_invoice,
-        has_paying_subscription,
-        0 sessions,
-        0 visitors,
-        0 signups,
-        sum(1) as terminations,
-        0 sessions_ly,
-        0 visitors_ly,
-        0 signups_ly,
-        0 terminations_ly,
-        0 first_subs,
-        0 return_subs,
-        0 total_subs,
-        0 first_subs_annual,
-        0 return_subs_annual,
-        0 total_subs_annual,
-        0 first_subs_ly,
-        0 return_subs_ly,
-        0 total_subs_ly,
-        0 first_subs_annual_ly,
-        0 return_subs_annual_ly,
-        0 total_subs_annual_ly,
-        0 first_subs_payment,
-        0 return_subs_payment,
-        0 total_subs_payment,
-        0 first_subs_annual_payment,
-        0 return_subs_annual_payment,
-        0 total_subs_annual_payment,
-        0 first_subs_payment_ly,
-        0 return_subs_payment_ly,
-        0 total_subs_payment_ly,
-        0 first_subs_annual_payment_ly,
-        0 return_subs_annual_payment_ly,
-        0 total_subs_annual_payment_ly
-    FROM SubPrep a
-    LEFT JOIN elements.dim_elements_channel c on (a.dim_elements_channel_key=c.dim_elements_channel_key)
-	WHERE   1=1
-                AND recurly_subscription_id is not null
-				and termination_date is not null
-                AND termination_date::date <getdate_aest()::date
-                AND termination_date::date>=dateadd('year',-2,date_trunc('year',getdate_aest()))::date
-GROUP BY 1,2,3,4,5,6,7,8,9),
+ (
+                /*NB: This query will only return queries if the dates go back to 2019 or less*/
+            select
+            'C' as period,
+            cast(termination_date as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            geonetwork_country,
+            initial_plan,
+            coupon_type_first_invoice,
+            has_paying_subscription,
+            0 sessions,
+            0 visitors,
+            0 as signups,
+            sum(1) terminations,
+            0 sessions_ly,
+            0 visitors_ly,
+            0 signups_ly,
+            0 terminations_ly,
+            0 first_subs,
+            0 return_subs,
+            0 total_subs,
+            0 first_subs_annual,
+            0 return_subs_annual,
+            0 total_subs_annual,
+            0 first_subs_ly,
+            0 return_subs_ly,
+            0 total_subs_ly,
+            0 first_subs_annual_ly,
+            0 return_subs_annual_ly,
+            0 total_subs_annual_ly,
+            0 first_subs_payment,
+            0 return_subs_payment,
+            0 total_subs_payment,
+            0 first_subs_annual_payment,
+            0 return_subs_annual_payment,
+            0 total_subs_annual_payment,
+            0 first_subs_payment_ly,
+            0 return_subs_payment_ly,
+            0 total_subs_payment_ly,
+            0 first_subs_annual_payment_ly,
+            0 return_subs_annual_payment_ly,
+            0 total_subs_annual_payment_ly
+                    --If Recurly - need to examine the lastest record by start date, and check if this one has a termination date or not
+            from
+                    SubPrep a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+            where
+                    subscription_platform='braintree'
+                    and termination_date is not null
+                    AND termination_date::date <envato.getdate_aest()::date
+                    AND termination_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+
+            union all
+            --Recurly terminations
+            --If Recurly - need to examine the lastest record by start date, and check if this one has a termination date or not
+            select
+            'C' as period,
+            cast(termination_date as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            geonetwork_country,
+            initial_plan,
+            coupon_type_first_invoice,
+            has_paying_subscription,
+            0 sessions,
+            0 visitors,
+            0 as signups,
+            sum(1) terminations,
+            0 sessions_ly,
+            0 visitors_ly,
+            0 signups_ly,
+            0 terminations_ly,
+            0 first_subs,
+            0 return_subs,
+            0 total_subs,
+            0 first_subs_annual,
+            0 return_subs_annual,
+            0 total_subs_annual,
+            0 first_subs_ly,
+            0 return_subs_ly,
+            0 total_subs_ly,
+            0 first_subs_annual_ly,
+            0 return_subs_annual_ly,
+            0 total_subs_annual_ly,
+            0 first_subs_payment,
+            0 return_subs_payment,
+            0 total_subs_payment,
+            0 first_subs_annual_payment,
+            0 return_subs_annual_payment,
+            0 total_subs_annual_payment,
+            0 first_subs_payment_ly,
+            0 return_subs_payment_ly,
+            0 total_subs_payment_ly,
+            0 first_subs_annual_payment_ly,
+            0 return_subs_annual_payment_ly,
+            0 total_subs_annual_payment_ly
+            from SubPrep a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+            where   recurly_subscription_id_index=1
+                    AND subscription_platform<>'braintree'
+                    AND termination_date is not null
+                    AND termination_date::date <envato.getdate_aest()::date
+                    AND termination_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+    )
+,
 
 Last_Year_Terminations as
     (   SELECT
         'L' as Period,
-        date_add('year',+1,termination_date) as calendar_date,
+        date_add('year',+1,calendar_date) as calendar_date,
         channel,
         sub_channel,
         channel_detail,
@@ -495,37 +555,37 @@ Last_Year_Terminations as
         coupon_type_first_invoice,
         has_paying_subscription,
         0 sessions,
-        0 visitors,
-        0 signups,
-        sum(1) as terminations,
-        0 sessions_ly,
-        0 visitors_ly,
-        0 signups_ly,
-        0 terminations_ly,
-        0 first_subs,
-        0 return_subs,
-        0 total_subs,
-        0 first_subs_annual,
-        0 return_subs_annual,
-        0 total_subs_annual,
-        0 first_subs_ly,
-        0 return_subs_ly,
-        0 total_subs_ly,
-        0 first_subs_annual_ly,
-        0 return_subs_annual_ly,
-        0 total_subs_annual_ly,
-        0 first_subs_payment,
-        0 return_subs_payment,
-        0 total_subs_payment,
-        0 first_subs_annual_payment,
-        0 return_subs_annual_payment,
-        0 total_subs_annual_payment,
-        0 first_subs_payment_ly,
-        0 return_subs_payment_ly,
-        0 total_subs_payment_ly,
-        0 first_subs_annual_payment_ly,
-        0 return_subs_annual_payment_ly,
-        0 total_subs_annual_payment_ly
+            0 visitors,
+            0 as signups,
+            0 as terminations,
+            0 sessions_ly,
+            0 visitors_ly,
+            0 signups_ly,
+            terminations terminations_ly,
+            0 first_subs,
+            0 return_subs,
+            0 total_subs,
+            0 first_subs_annual,
+            0 return_subs_annual,
+            0 total_subs_annual,
+            0 first_subs_ly,
+            0 return_subs_ly,
+            0 total_subs_ly,
+            0 first_subs_annual_ly,
+            0 return_subs_annual_ly,
+            0 total_subs_annual_ly,
+            0 first_subs_payment,
+            0 return_subs_payment,
+            0 total_subs_payment,
+            0 first_subs_annual_payment,
+            0 return_subs_annual_payment,
+            0 total_subs_annual_payment,
+            0 first_subs_payment_ly,
+            0 return_subs_payment_ly,
+            0 total_subs_payment_ly,
+            0 first_subs_annual_payment_ly,
+            0 return_subs_annual_payment_ly,
+            0 total_subs_annual_payment_ly
     FROM Current_Year_Terminations a
 )
 
