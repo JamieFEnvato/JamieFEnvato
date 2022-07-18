@@ -1,0 +1,818 @@
+create or replace view analysts.view_elements_rpt_elements_daily_summary as (
+    with elements_coupons_prep as (
+        SELECT
+            a.dim_subscription_key,
+            a.dim_elements_coupon_key,
+            case
+                when b.discount_percent=100 then 'full free'
+                when lower(b.name) like '%free%' then 'full free'
+                when b.dim_elements_coupon_key=0 then 'no coupon'
+                else 'partial free'
+            end as coupon_type,
+            row_number() over (partition by a.dim_subscription_key order by dim_date_key asc) as invoice_number
+        FROM
+            elements.fact_elements_subscription_transactions a
+            join elements.dim_elements_coupon b on (a.dim_elements_coupon_key=b.dim_elements_coupon_key)
+        WHERE 1=1 and a.dim_elements_coupon_key>0
+    ),
+    elements_sessions_base as (
+        SELECT
+            a.date_aest::date as session_date,
+            a.sessionid,
+            a.fullvisitorid,
+            a.geonetwork_country,
+            c.channel as channel,
+            c.sub_channel as sub_channel,
+            c.channel_detail AS channel_detail
+        FROM
+            webanalytics.ds_bq_sessions_elements a
+            left join elements.rpt_elements_session_channel c on (a.sessionid=c.sessionid)
+        WHERE 1=1
+            and a.date<to_char(envato.getdate_aest(),'YYYYMMDD')::INT
+    ),
+    rd_sessions_cy AS (
+        select
+            'Current Year' as period,
+            a.session_date as calendar_date,
+            a.channel as channel,
+            a.sub_channel as sub_channel,
+            a.channel_detail AS channel_detail,
+            a.geonetwork_country AS geonetwork_country,
+            null as initial_plan,
+            null as coupon_type_first_invoice,
+            null as has_paying_subscription,
+            count(a.sessionid) as sessions,
+            count (distinct a.fullvisitorid) as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+        from
+            elements_sessions_base a
+        where 1=1
+        and a.session_date>=dateadd('year', -3, date_trunc('year',envato.getdate_aest()))::date
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+     --2. Sessions Query Last Year
+    rd_sessions_ly AS (
+        select
+            'Last Year' as period,
+            dateadd('year', +1, a.session_date) as calendar_date,
+            a.channel,
+            a.sub_channel,
+            a.channel_detail,
+            a.geonetwork_country,
+            null as initial_plan,
+            null as coupon_type_first_invoice,
+            null as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            count(a.sessionid) as sessions_ly,
+            count (distinct a.fullvisitorid) as visitors_ly
+        from
+            elements_sessions_base a
+        WHERE 1=1
+            and a.session_date<=dateadd(day, -180, envato.getdate_aest())::date
+        and a.session_date>=dateadd('year', -2, date_trunc('year',envato.getdate_aest()))::date
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+    --3. Signups Query Current Year
+    rd_signups_cy AS (
+        select
+            'Current Year' as period,
+            cast(a.signup_date as date) as calendar_date,
+            c.channel as channel,
+            c.sub_channel as sub_channel,
+            c.channel_detail AS channel_detail,
+            b.geonetwork_country AS geonetwork_country,
+            null as initial_plan,
+            null as coupon_type_first_invoice,
+            null as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            count(*) as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+        from
+            elements.rpt_elements_user_signup_session a
+            left join elements_sessions_base b on a.sessionid=b.sessionid
+            left join elements.rpt_elements_session_channel c on a.sessionid=c.sessionid
+        WHERE 1=1
+            AND a.signup_date::date<envato.getdate_aest()::date
+            AND a.signup_date::date>=dateadd('year',-3,date_trunc('year',envato.getdate_aest()))::date
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+    --4. Signups Query Last Year
+    rd_signups_ly AS (
+        select
+            'Last Year' as period,
+            dateadd('year', +1, cast(a.signup_date as date)) as calendar_date,
+            c.channel as channel,
+            c.sub_channel as sub_channel,
+            c.channel_detail AS channel_detail,
+            b.geonetwork_country AS geonetwork_country,
+            null as initial_plan,
+            null as coupon_type_first_invoice,
+            null as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            count(*) as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+        from
+            elements.rpt_elements_user_signup_session a
+            left join elements_sessions_base b on a.sessionid=b.sessionid
+            left join elements.rpt_elements_session_channel c on a.sessionid=c.sessionid
+        WHERE 1=1
+            AND a.signup_date::date<=dateadd('day',-180,envato.getdate_aest())::date
+            AND a.signup_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+    ),
+    --5. Subscriptions Query Current Year
+    rd_subs_cy as (
+        select
+            'Current Year' as period,
+            cast(res1.subscription_start_date as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            res1.initial_plan,
+            case when res1.subscription_started_on_trial is true and res1.subscription_start_date::date>='2021-02-08' and res1.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when res1.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when res1.first_successful_payment_date_aet is not null and res1.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when res1.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            sum(case when is_first_subscription then 1 end) as first_subs,
+            sum(case when not is_first_subscription then 1 end) return_subs,
+            sum(1) as total_subs,
+            sum(case when is_first_subscription and initial_plan like '%_annual' then 1 end) as first_subs_annual,
+            sum(case when not is_first_subscription and initial_plan like '%_annual' then 1 end) as return_subs_annual,
+            sum(case when initial_plan like '%_annual' then 1 end) as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+        from
+        elements.dim_elements_subscription as res1
+        join elements.dim_elements_channel b on (res1.dim_elements_channel_key=b.dim_elements_channel_key)
+        join market.dim_geo_network f on (res1.dim_geo_network_key=f.dim_geo_network_key)
+        left join elements_coupons_prep ec on (res1.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+        WHERE 1=1
+            AND res1.subscription_start_date::date<envato.getdate_aest()::date
+            AND res1.subscription_start_date::date>=dateadd('year',-3,date_trunc('year',envato.getdate_aest()))::date
+        and not plan_change
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+    --6. Subscriptions Query Last Year
+    rd_subs_ly as (
+        select
+        'Last Year' as period,
+        dateadd('year', +1, cast(res1.subscription_start_date as date)) as calendar_date,
+        b.channel as channel,
+        b.sub_channel as sub_channel,
+        b.channel_detail AS channel_detail,
+        f.country as geonetwork_country,
+        res1.initial_plan,
+        case when res1.subscription_started_on_trial is true and res1.subscription_start_date::date>='2021-02-08' and res1.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when res1.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when res1.first_successful_payment_date_aet is not null and res1.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when res1.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+        0 as sessions,
+        0 as visitors,
+        0 as signups,
+        0 as signups_ly,
+        0 as first_subs,
+        0 as return_subs,
+        0 as total_subs,
+        0 as first_subs_annual,
+        0 as return_subs_annual,
+        0 as total_subs_annual,
+        sum(case when is_first_subscription then 1 end) as first_subs_ly,
+        sum(case when not is_first_subscription then 1 end) as return_subs_ly,
+        sum(1) as total_subs_ly,
+        sum(case when is_first_subscription and initial_plan like '%_annual' then 1 end) as first_subs_annual_ly,
+        sum(case when not is_first_subscription and initial_plan like '%_annual' then 1 end) as return_subs_annual_ly,
+        sum(case when initial_plan like '%_annual' then 1 end) as total_subs_annual_ly,
+        0 as first_subs_payment,
+        0 as return_subs_payment,
+        0 as total_subs_payment,
+        0 as first_subs_annual_payment,
+        0 as return_subs_annual_payment,
+        0 as total_subs_annual_payment,
+        0 as first_subs_payment_ly,
+        0 as return_subs_payment_ly,
+        0 as total_subs_payment_ly,
+        0 as first_subs_annual_payment_ly,
+        0 as return_subs_annual_payment_ly,
+        0 as total_subs_annual_payment_ly,
+        0 as terminations,
+        0 as terminations_ly,
+        0 as sessions_ly,
+        0 as visitors_ly
+        from
+        elements.dim_elements_subscription as res1
+        join elements.dim_elements_channel b on (res1.dim_elements_channel_key=b.dim_elements_channel_key)
+        join market.dim_geo_network f on (res1.dim_geo_network_key=f.dim_geo_network_key)
+        left join elements_coupons_prep ec on (res1.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+        WHERE 1=1
+            AND res1.subscription_start_date::date <= dateadd('day',-180,envato.getdate_aest())::date
+            AND res1.subscription_start_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            and not plan_change
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+    --7. Terminations Query Current Year
+    rd_terminations_cy as (
+            select
+            'Current Year' as period,
+            cast(termination_date as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            a.initial_plan,
+            case when a.subscription_started_on_trial is true and a.subscription_start_date::date>='2021-02-08' and a.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when a.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when a.first_successful_payment_date_aet is not null and a.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when a.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            sum(1) as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+                    --If Recurly - need to examine the lastest record by start date, and check if this one has a termination date or not
+            from
+                    elements.dim_elements_subscription a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+                    left join elements_coupons_prep ec on (a.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+                    join market.dim_geo_network f on (a.dim_geo_network_key=f.dim_geo_network_key)
+            where
+                    subscription_platform='braintree'
+                    and termination_date is not null
+                    AND termination_date::date <envato.getdate_aest()::date
+                    AND termination_date::date>=dateadd('year',-3,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+
+            union all
+            --Recurly terminations
+            --If Recurly - need to examine the lastest record by start date, and check if this one has a termination date or not
+            select
+            'Current Year' as period,
+            cast(termination_date as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            a.initial_plan,
+            case when a.subscription_started_on_trial is true and a.subscription_start_date::date>='2021-02-08' and a.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when a.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when a.first_successful_payment_date_aet is not null and a.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when a.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            sum(1) as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+
+            from
+                    (select
+                            *
+                    from
+                            (select
+                                    *,
+                                    row_number() over (partition by recurly_subscription_id order by subscription_start_date desc) recurly_subscription_id_index
+                            from
+                                    elements.dim_elements_subscription
+                            where
+                                    recurly_subscription_id is not null
+                            )
+                    where
+                            recurly_subscription_id_index=1) a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+                    left join elements_coupons_prep ec on (a.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+                    join market.dim_geo_network f on (a.dim_geo_network_key=f.dim_geo_network_key)
+            where
+                    --Though not needed, as recurly sub id is not null - but just for the clarification:
+                    subscription_platform<>'braintree'--Jamie check how recurly is spelled
+                    and termination_date is not null
+                    AND termination_date::date <envato.getdate_aest()::date
+                    AND termination_date::date>=dateadd('year',-3,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+    ),
+    --8. Terminations Query Last Year
+    rd_termination_ly as (
+            select
+            'Last Year' as period,
+            dateadd('year', +1, cast(termination_date as date)) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            a.initial_plan,
+            case when a.subscription_started_on_trial is true and a.subscription_start_date::date>='2021-02-08' and a.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when a.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when a.first_successful_payment_date_aet is not null and a.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when a.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            sum(1) as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+
+                    --If Recurly - need to examine the lastest record by start date, and check if this one has a termination date or not
+            from
+                    elements.dim_elements_subscription a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+                    left join elements_coupons_prep ec on (a.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+                    join market.dim_geo_network f on (a.dim_geo_network_key=f.dim_geo_network_key)
+            where
+                    subscription_platform='braintree'
+                    and termination_date is not null
+                    AND termination_date::date<dateadd('day',-180,envato.getdate_aest()::date)
+                    AND termination_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+
+            union all
+
+            select
+            'Last Year' as period,
+            dateadd('year', +1, cast(termination_date as date)) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            a.initial_plan,
+            case when a.subscription_started_on_trial is true and a.subscription_start_date::date>='2021-02-08' and a.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when a.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when a.first_successful_payment_date_aet is not null and a.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when a.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            0 as first_subs_payment,
+            0 as return_subs_payment,
+            0 as total_subs_payment,
+            0 as first_subs_annual_payment,
+            0 as return_subs_annual_payment,
+            0 as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            sum(1) as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+
+            from
+                    (select
+                            *
+                    from
+                            (select
+                                    *,
+                                    row_number() over (partition by recurly_subscription_id order by subscription_start_date desc) recurly_subscription_id_index
+                            from
+                                    elements.dim_elements_subscription
+                            where
+                                    recurly_subscription_id is not null
+                            )
+                    where
+                            recurly_subscription_id_index=1) a
+                    join elements.dim_elements_channel b on (a.dim_elements_channel_key=b.dim_elements_channel_key)
+                    left join elements_coupons_prep ec on (a.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+                    join market.dim_geo_network f on (a.dim_geo_network_key=f.dim_geo_network_key)
+            where
+                    --Though not needed, as recurly sub id is not null - but just for the clarification:
+                    subscription_platform<>'braintree'
+                    and termination_date is not null
+                    AND termination_date::date<dateadd('day',-180,envato.getdate_aest()::date)
+                    AND termination_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            group by 1,2,3,4,5,6,7,8,9
+    ),
+
+    --10. Subscriptions Query by first non trivial payment date Last Year
+    rd_payment_cy as (
+        select
+            'Current Year' as period,
+            cast(res1.first_successful_non_trivial_payment_date_aet as date) as calendar_date,
+            b.channel as channel,
+            b.sub_channel as sub_channel,
+            b.channel_detail AS channel_detail,
+            f.country as geonetwork_country,
+            res1.initial_plan,
+            case when res1.subscription_started_on_trial is true and res1.subscription_start_date::date>='2021-02-08' and res1.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when res1.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when res1.first_successful_payment_date_aet is not null and res1.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when res1.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+            0 as sessions,
+            0 as visitors,
+            0 as signups,
+            0 as signups_ly,
+            0 as first_subs,
+            0 as return_subs,
+            0 as total_subs,
+            0 as first_subs_annual,
+            0 as return_subs_annual,
+            0 as total_subs_annual,
+            0 as first_subs_ly,
+            0 as return_subs_ly,
+            0 as total_subs_ly,
+            0 as first_subs_annual_ly,
+            0 as return_subs_annual_ly,
+            0 as total_subs_annual_ly,
+            sum(case when is_first_subscription then 1 end) as first_subs_payment,
+            sum(case when not is_first_subscription then 1 end) return_subs_payment,
+            sum(1) as total_subs_payment,
+            sum(case when is_first_subscription and initial_plan like '%_annual' then 1 end) as first_subs_annual_payment,
+            sum(case when not is_first_subscription and initial_plan like '%_annual' then 1 end) as return_subs_annual_payment,
+            sum(case when initial_plan like '%_annual' then 1 end) as total_subs_annual_payment,
+            0 as first_subs_payment_ly,
+            0 as return_subs_payment_ly,
+            0 as total_subs_payment_ly,
+            0 as first_subs_annual_payment_ly,
+            0 as return_subs_annual_payment_ly,
+            0 as total_subs_annual_payment_ly,
+            0 as terminations,
+            0 as terminations_ly,
+            0 as sessions_ly,
+            0 as visitors_ly
+        from
+        elements.dim_elements_subscription as res1
+        join elements.dim_elements_channel b on (res1.dim_elements_channel_key=b.dim_elements_channel_key)
+        join market.dim_geo_network f on (res1.dim_geo_network_key=f.dim_geo_network_key)
+        left join elements_coupons_prep ec on (res1.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+        WHERE 1=1
+            AND res1.subscription_start_date::date<envato.getdate_aest()::date
+            AND res1.subscription_start_date::date>=dateadd('year',-3,date_trunc('year',envato.getdate_aest()))::date
+        and not plan_change
+        group by 1,2,3,4,5,6,7,8,9
+    ),
+    --11. Subscriptions Query Last Year
+    rd_payment_ly as (
+        select
+        'Last Year' as period,
+        dateadd('year', +1, cast(res1.first_successful_non_trivial_payment_date_aet as date)) as calendar_date,
+        b.channel as channel,
+        b.sub_channel as sub_channel,
+        b.channel_detail AS channel_detail,
+        f.country as geonetwork_country,
+        res1.initial_plan,
+        case when res1.subscription_started_on_trial is true and res1.subscription_start_date::date>='2021-02-08' and res1.subscription_platform='recurly' then 'free trial' else coalesce(ec.coupon_type,'no coupon') end as coupon_type_first_invoice,
+            case
+                when res1.first_successful_non_trivial_payment_date_aet is not null then 'paying sub >$1'
+                when res1.first_successful_payment_date_aet is not null and res1.first_successful_non_trivial_payment_date_aet is null then 'paying sub $1 coupon or less'
+                when res1.first_successful_payment_date_aet is null then 'on free trial/free coupon'
+            end as has_paying_subscription,
+        0 as sessions,
+        0 as visitors,
+        0 as signups,
+        0 as signups_ly,
+        0 as first_subs,
+        0 as return_subs,
+        0 as total_subs,
+        0 as first_subs_annual,
+        0 as return_subs_annual,
+        0 as total_subs_annual,
+        0 as first_subs_ly,
+        0 as return_subs_ly,
+        0 as total_subs_ly,
+        0 as first_subs_annual_ly,
+        0 as return_subs_annual_ly,
+        0 as total_subs_annual_ly,
+        0 as first_subs_payment,
+        0 as return_subs_payment,
+        0 as total_subs_payment,
+        0 as first_subs_annual_payment,
+        0 as return_subs_annual_payment,
+        0 as total_subs_annual_payment,
+        sum(case when is_first_subscription then 1 end) as first_subs_payment_ly,
+        sum(case when not is_first_subscription then 1 end) as first_subs_payment_ly,
+        sum(1) as total_subs_payment_ly,
+        sum(case when is_first_subscription and initial_plan like '%_annual' then 1 end) as first_subs_annual_payment_ly,
+        sum(case when not is_first_subscription and initial_plan like '%_annual' then 1 end) as return_subs_annual_payment_ly,
+        sum(case when initial_plan like '%_annual' then 1 end) as total_subs_annual_payment_ly,
+        0 as terminations,
+        0 as terminations_ly,
+        0 as sessions_ly,
+        0 as visitors_ly
+        from
+        elements.dim_elements_subscription as res1
+        join elements.dim_elements_channel b on (res1.dim_elements_channel_key=b.dim_elements_channel_key)
+        join market.dim_geo_network f on (res1.dim_geo_network_key=f.dim_geo_network_key)
+        left join elements_coupons_prep ec on (res1.dim_subscription_key=ec.dim_subscription_key and ec.invoice_number=1)
+        WHERE 1=1
+            AND res1.subscription_start_date::date <= dateadd('day',-180,envato.getdate_aest())::date
+            AND res1.subscription_start_date::date>=dateadd('year',-2,date_trunc('year',envato.getdate_aest()))::date
+            and not plan_change
+        group by 1,2,3,4,5,6,7,8,9
+    )
+
+    --9. Final Query
+    select
+        dateadd('day',-1,envato.getdate_aest()::date) as last_date, --This will be used as the Pivot point between
+        RD.period,
+        RD.calendar_date,
+        RD.channel,
+        RD.sub_channel as sub_channel,
+        RD.channel_detail AS channel_detail,
+        RD.geonetwork_country AS geonetwork_country,
+        RD.initial_plan,
+        rd.coupon_type_first_invoice,
+        rd.has_paying_subscription,
+        sum(sessions) as sessions,
+        sum(visitors) as visitors,
+        sum(signups) as signups,
+        sum(signups_ly) as signups_ly,
+        sum(first_subs) as first_subs,
+        sum(return_subs) as return_subs,
+        sum(total_subs) as total_subs,
+        sum(first_subs_annual) as first_subs_annual,
+        sum(return_subs_annual) as return_subs_annual,
+        sum(total_subs_annual) as total_subs_annual,
+        sum(first_subs_ly) as first_subs_ly,
+        sum(return_subs_ly) as return_subs_ly,
+        sum(total_subs_ly) as total_subs_ly,
+        sum(first_subs_annual_ly) as first_subs_annual_ly,
+        sum(return_subs_annual_ly) as return_subs_annual_ly,
+        sum(total_subs_annual_ly) as total_subs_annual_ly,
+        sum(first_subs_payment) as first_subs_payment,
+        sum(return_subs_payment) as return_subs_payment,
+        sum(total_subs_payment) as total_subs_payment,
+        sum(first_subs_annual_payment) as first_subs_annual_payment,
+        sum(return_subs_annual_payment) as return_subs_annual_payment,
+        sum(total_subs_annual_payment) as total_subs_annual_payment,
+        sum(first_subs_payment_ly) as first_subs_payment_ly,
+        sum(return_subs_payment_ly) as return_subs_payment_ly,
+        sum(total_subs_payment_ly) as total_subs_payment_ly,
+        sum(first_subs_annual_payment_ly) as first_subs_annual_payment_ly,
+        sum(return_subs_annual_payment_ly) as return_subs_annual_payment_ly,
+        sum(total_subs_annual_payment_ly) as total_subs_annual_payment_ly,
+        sum(terminations) as terminations,
+        sum(terminations_ly) as terminations_ly,
+        sum(sessions_ly) as sessions_ly,
+        sum(visitors_ly) as visitors_ly
+    from
+      (
+        select * from rd_sessions_cy
+        union
+        select * from rd_sessions_ly
+        union
+        select * from rd_signups_cy
+        union
+        select * from rd_signups_ly
+        union
+        select * from rd_subs_cy
+        union
+        select * from rd_subs_ly
+        union
+        select * from rd_terminations_cy
+        union
+        select * from rd_termination_ly
+        union
+        select * from rd_payment_cy
+        union
+        select * from rd_payment_ly
+      ) AS RD
+    group by 1,2,3,4,5,6,7,8,9,10
+)
+with no schema binding;
+grant all on analysts.view_elements_rpt_elements_daily_summary to group analystsrw;
